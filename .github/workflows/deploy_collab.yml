@@ -5,6 +5,8 @@ on:
     tags:
       - collab-production
       - collab-staging
+    branches:
+      - collab-deploys
 
 env:
   DOCKER_BUILDKIT: 1
@@ -54,26 +56,26 @@ jobs:
       - style
       - tests
     runs-on:
-      - self-hosted
-      - deploy
+      - ubuntu-latest
     steps:
-      - name: Add Rust to the PATH
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-
-      - name: Sign into DigitalOcean docker registry
-        run: doctl registry login
-
-      - name: Prune Docker system
-        run: docker system prune  --filter 'until=720h' -f
-
       - name: Checkout repo
         uses: actions/checkout@v4
         with:
           clean: false
           submodules: "recursive"
+          fetch-depth: 0
+
+      - name: build collab
+        shell: bash -euxo pipefail {0}
+        run: |
+          export CARGO_PROFILE_RELEASE_PANIC=abort
+          cargo build --release --package collab --bin collab
 
       - name: Build docker image
-        run: docker build . --build-arg GITHUB_SHA=$GITHUB_SHA --tag registry.digitalocean.com/zed/collab:$GITHUB_SHA
+        run: docker build . --tag registry.digitalocean.com/zed/collab:$GITHUB_SHA
+
+      - name: Sign into DigitalOcean docker registry
+        run: doctl registry login
 
       - name: Publish docker image
         run: docker push registry.digitalocean.com/zed/collab:${GITHUB_SHA}
@@ -83,8 +85,7 @@ jobs:
     needs:
       - publish
     runs-on:
-      - self-hosted
-      - deploy
+      - ubuntu-latest
 
     steps:
       - name: Sign into Kubernetes
